@@ -1,6 +1,6 @@
 {
   "name": "dexie-worker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A lightweight library for managing IndexedDB in a Web Worker using Dexie.js, optimized for React applications. It offers reactive database access with RxJS and Dexie hooks, providing efficient data handling in the background without blocking the main thread.",
   "main": "dist/dexie-worker.umd.js",
   "module": "dist/dexie-worker.es.js",
