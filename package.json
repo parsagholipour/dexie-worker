@@ -49,5 +49,9 @@
     "dexie": {
       "optional": true
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/parsagholipour/dexie-worker.git"
   }
 }
