@@ -1,34 +1,6 @@
 import Dexie from 'dexie';
 import getWorkerCode from "./getWorkerCode";
-
-interface WorkerMessage {
-  id: number;
-  type: string;
-  chain?: ChainItem[];
-  schema?: DbSchema;
-  [key: string]: string | number | DbSchema | ChainItem[] | undefined;
-}
-
-interface WorkerResponse {
-  id: number;
-  result?: any;
-  error?: string;
-  type: string;
-  changedTables?: string[];
-}
-
-interface ChainItem {
-  type: 'get' | 'call';
-  prop?: string;
-  method?: string;
-  args?: any[];
-}
-
-interface DbSchema {
-  name: string;
-  version: number;
-  stores: { [tableName: string]: string };
-}
+import {ChainItem, DbSchema, DexieWorkerOptions, WorkerMessage, WorkerResponse} from './types/common'
 
 // Variables to manage the worker and message handling
 let worker: Worker | null = null;
@@ -43,13 +15,19 @@ const changeListeners: Array<(changedTables: Set<string>) => void> = [];
 /**
  * Initializes the web worker and sets up message handling.
  * @param dbInstance The existing Dexie instance from which to extract the schema.
+ * @param options
  */
-function initializeWorker(dbInstance: Dexie): Promise<Worker> {
+function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerOptions): Promise<Worker> {
   if (!workerReady) {
-    workerReady = new Promise<Worker>((resolve, reject) => {
-      const workerCode = getWorkerCode();
-      const blob = new Blob([workerCode], { type: 'text/javascript' });
-      const workerURL = URL.createObjectURL(blob);
+    workerReady = new Promise<Worker>((resolve) => {
+      let workerURL;
+      if (options?.workerUrl) {
+        workerURL = options?.workerUrl;
+      } else {
+        const workerCode = getWorkerCode();
+        const blob = new Blob([workerCode], { type: 'text/javascript' });
+        workerURL = URL.createObjectURL(blob);
+      }
 
       worker = new Worker(workerURL, { type: 'classic' });
       worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
@@ -95,10 +73,10 @@ function initializeWorker(dbInstance: Dexie): Promise<Worker> {
  * @param dbInstance The Dexie instance used to extract the schema.
  * @returns A proxy that represents the Dexie database.
  */
-export default function createDexieProxy(dbInstance: Dexie) {
-  initializeWorker(dbInstance);
+export default function createDexieProxy<T extends Dexie>(dbInstance: T, options?: DexieWorkerOptions): T {
+  initializeWorker<T>(dbInstance);
 
-  return createProxy();
+  return createProxy<T>();
 }
 
 /**
@@ -107,10 +85,10 @@ export default function createDexieProxy(dbInstance: Dexie) {
  * @param tableAccessCallback Optional callback to track table accesses.
  * @returns A proxy that allows for method chaining.
  */
-function createProxy(
+function createProxy<T>(
   chain: ChainItem[] = [],
   tableAccessCallback?: (tableName: string) => void
-): any {
+): T {
   const proxyFunction = function () {};
   const proxy = new Proxy(proxyFunction, {
     get(_target, prop: string | symbol) {
@@ -137,7 +115,7 @@ function createProxy(
     },
   });
 
-  return proxy;
+  return proxy as T;
 }
 
 /**
