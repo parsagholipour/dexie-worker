@@ -1,5 +1,3 @@
-// dbWorker.ts
-
 import Dexie, { DBCore, DBCoreMutateRequest } from 'dexie';
 
 // Declare variables to hold the Dexie database instance and its schema
@@ -121,7 +119,22 @@ async function executeChain(chain: any[]) {
         throw new Error("Property or table" + item.prop + "does not exist.");
       }
     } else if (item.type === 'call') {
-      if (typeof context[item.method] === 'function') {
+      if (item.method === 'operation') {
+        //Call a custom operation defined by the user
+        // @ts-ignore
+        if (typeof operations !== 'undefined' && typeof operations[item.args[0]] === 'function') {
+          // @ts-ignore
+          context = operations[item.args[0]](context, ...item.args.slice(1))
+          if (context && typeof context.then === 'function') {
+            context = await context;
+          }
+        } else {
+          // @ts-ignore
+          const errorText = typeof operations === 'undefined' ? 'Operations is not defined. Please generate the worker file by supplying a valid \'operations\' file.' :
+            'Function name' + item.args[0] + 'is not defined in the operations file. Have you generated a new worker after updating your operations file?';
+          throw new Error(errorText)
+        }
+      } else if (typeof context[item.method] === 'function') {
         context = context[item.method](...item.args);
         if (context && context.then) {
           context = await context;
@@ -134,7 +147,7 @@ async function executeChain(chain: any[]) {
 
   // Ensure the result is serializable before returning
   if (!isSerializable(context)) {
-    throw new Error('Result is not serializable.');
+    throw new Error('Result is not serializable.', context);
   }
 
   return context;
@@ -142,7 +155,6 @@ async function executeChain(chain: any[]) {
 
 function isSerializable(value: any): boolean {
   try {
-    // Use structuredClone or an alternative if structuredClone is not available
     structuredClone(value);
     return true;
   } catch {

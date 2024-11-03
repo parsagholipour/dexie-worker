@@ -1,10 +1,12 @@
-import Dexie from 'dexie';
+import Dexie, {DBCore, DBCoreMutateRequest} from 'dexie';
 import getWorkerCode from "./getWorkerCode";
 import {ChainItem, DbSchema, DexieWorkerOptions, WorkerMessage, WorkerResponse} from './types/common'
+import {FALLBACK_METHODS} from "./const";
 
 // Variables to manage the worker and message handling
 let worker: Worker | null = null;
 let workerReady: Promise<Worker>;
+let db: Dexie;
 let messageId = 0;
 const pendingMessages = new Map<
   number,
@@ -24,7 +26,10 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
       if (options?.workerUrl) {
         workerURL = options?.workerUrl;
       } else {
-        const workerCode = getWorkerCode();
+        let workerCode = getWorkerCode();
+        if (options?.dexieVersion) {
+          workerCode = workerCode.replace('3.2.2', options.dexieVersion!)
+        }
         const blob = new Blob([workerCode], { type: 'text/javascript' });
         workerURL = URL.createObjectURL(blob);
       }
@@ -59,6 +64,10 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
 
       // Extract the schema from the existing Dexie instance
       const dbSchema = extractSchema(dbInstance);
+      db = dbInstance;
+
+      // To support live queries
+      addChangeTrackingMiddleware(db);
 
       // Initialize the worker with the database schema
       const initId = messageId++;
@@ -74,7 +83,7 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
  * @returns A proxy that represents the Dexie database.
  */
 export default function createDexieProxy<T extends Dexie>(dbInstance: T, options?: DexieWorkerOptions): T {
-  initializeWorker<T>(dbInstance);
+  initializeWorker<T>(dbInstance, options);
 
   return createProxy<T>();
 }
@@ -93,6 +102,10 @@ function createProxy<T>(
   const proxy = new Proxy(proxyFunction, {
     get(_target, prop: string | symbol) {
       if (prop.toString() === 'then') {
+        const lastItem = chain[chain.length - 1];
+        if (FALLBACK_METHODS.includes(lastItem.method as string)) {
+          return executeOnMainThread(chain)
+        }
         const resultPromise = executeChain(chain);
         return resultPromise.then.bind(resultPromise);
       }
@@ -130,6 +143,87 @@ async function executeChain(chain: ChainItem[]): Promise<any> {
     pendingMessages.set(id, { resolve, reject });
     _worker!.postMessage({ id, type: 'execute', chain } as WorkerMessage);
   });
+}
+
+/**
+ * Executes a chain of operations on the main thread to ensure compatibility with
+ * methods not supported in web workers (e.g., 'hook', 'each', etc.).
+ * @param chain The sequence of property accesses and method calls to execute.
+ * @returns A promise that resolves with the result of the execution.
+ */
+async function executeOnMainThread(chain: ChainItem[]): Promise<any> {
+  let current: any = db; // Start from the Dexie database instance
+
+  for (const item of chain) {
+    // If the current value is a promise, wait for it to resolve
+    if (current && typeof current.then === 'function') {
+      current = await current;
+    }
+
+    if (item.type === 'get') {
+      // Access the property specified by 'prop'
+      current = current[item.prop!];
+    } else if (item.type === 'call') {
+      // Call the method specified by 'method' with arguments 'args'
+      const func = current[item.method!];
+      if (typeof func !== 'function') {
+        throw new Error(`Property '${item.method}' is not a function`);
+      }
+
+      // Invoke the function with the provided arguments
+      current = func.apply(current, item.args || []);
+
+      // Optional: await the result if it's a promise
+      if (current && typeof current.then === 'function') {
+        current = await current;
+      }
+    } else {
+      throw new Error(`Unknown chain item type: ${item.type}`);
+    }
+  }
+
+  // Ensure the final result is resolved if it's a promise
+  if (current && typeof current.then === 'function') {
+    current = await current;
+  }
+
+  return current;
+}
+
+/**
+ * Adds a change-tracking middleware to the Dexie instance to monitor table mutations executed on the main thread.
+ * This is necessary because some Dexie methods (e.g., 'hook', 'each') cannot be executed within web workers.
+ * By handling these methods on the main thread, we ensure that change events are appropriately triggered.
+ *
+ * @param db - The Dexie database instance to which the middleware will be attached.
+ */
+function addChangeTrackingMiddleware(db: Dexie) {
+  db.use({
+    stack: 'dbcore',
+    name: 'ChangeTrackingMiddleware',
+    create(downlevelDatabase: DBCore) {
+      return {
+        ...downlevelDatabase,
+        table(tableName: string) {
+          const downlevelTable = downlevelDatabase.table(tableName);
+          return {
+            ...downlevelTable,
+            mutate(req: DBCoreMutateRequest) {
+              // Perform the mutation
+              return downlevelTable.mutate(req).then((res) => {
+                // After the mutation, notify the main thread
+                const changedTables = new Set<string>();
+                changedTables.add(tableName);
+                const changedTablesSet = new Set<string>(changedTables);
+                changeListeners.forEach((listener) => listener(changedTablesSet));
+                return res;
+              });
+            },
+          };
+        },
+      };
+    },
+  })
 }
 
 

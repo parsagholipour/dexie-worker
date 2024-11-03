@@ -66,7 +66,9 @@ class MyDatabase extends Dexie {
 }
 
 // Initialize with Web Worker support
-const db = getWebWorkerDB(new MyDatabase());
+const db = getWebWorkerDB(new MyDatabase(), {
+  dexieVersion: 'latest' // Use 'latest' or a specific version like '4.0.9 - it should be accessible from the url: https://cdn.jsdelivr.net/npm/dexie@{YOUR VERSION}/dist/dexie.min.js
+});
 ```
 
 With this setup, you're free to use a function-based approach to organize and create multiple Dexie instances or handle conditional setups within your application.
@@ -106,6 +108,68 @@ userLiveData.subscribe({
 });
 ```
 
+### Content Security Policies
+This library uses code injection to execute the web worker, which may not comply with [Content Security Policy (CSP)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) if your website uses one. To ensure CSP compliance, please follow the [Generate Web Worker File section](#generate-web-worker-file).
+### Generate Web Worker File
+To generate a web worker file, execute the following 
+```bash
+generate-dexie-worker
+```
+This command generates a web worker file based on your project configuration. The file  needs to be placed in a publicly accessible location (e.g. http://localhost/dexieWorker.js)
+
+To initialize the Dexie worker with the generated file:
+```js
+const db = getWebWorkerDB(dexieDb, {
+  workerUrl: '/dexieWorker.js' // the path can be different based on your environment
+});
+```
+This will no longer use code injection.
+
+### Custom Operations
+You can create custom operations to run within the web worker to improve performance and extend support to cases that are otherwise unsupported due to limitations in communicating with the web worker, such as the inability to pass callbacks (e.g., with methods like [each](https://dexie.org/docs/Collection/Collection.each())).
+To get started, follow these steps:
+1. Create a `dexieOperations.js`(or `.ts`) file with your custom operations:
+```ts
+import Dexie from "dexie";
+import map from "lodash.map"; // you can use external libraries
+
+export default {
+  async runBulkOperationInWorkerExample(dexie: Dexie, arg1: any, arg2: any) {
+    const oldUsers = await dexie.users.toArray();
+
+    const newUsers = map(oldUsers, user => ({
+      ...user,
+      isActive: true,
+    }));
+
+    await dexie.transaction('rw', dexie.usersV2, async () => {
+      await dexie.usersV2.bulkPut(newUsers);
+    });
+    
+    return 'A seralizable result' // e.g Objects, Arrays, Strings, etc. To learn more about not supported types refer to https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#things_that_dont_work_with_structured_clone
+  },
+  // ...other methods
+}
+```
+2. Generate the web worker file:
+```bash
+generate-dexie-worker ./path/to/dexieOperations.js
+```
+Note: The command automatically detects your Dexie version from package.json, but you can specify a version manually:
+```bash
+npx generate-dexie-worker ./path/to/dexieOperations.js "3.2.2"
+```
+3. Place the generated file in a publicly accessible location(e.g. http://localhost/dexieWorker.js)
+4. initialize the dexie worker with the following options:
+```js
+const db = getWebWorkerDB(dexieDb, {
+  workerUrl: '/dexieWorker.js' // the path can be different based on your environment
+});
+```
+5. Call your custom operations:
+```js
+const result = db.operation('runBulkOperationInWorkerExample', arg1, arg2)
+```
 ## API
 
 ### getWebWorkerDB(dbInstance)
@@ -131,7 +195,7 @@ userLiveData.subscribe({
 
 ## Compatibility
 
-- Dexie.js v3.0+
+- Dexie.js v3.0+ and v4.0+
 - React v16.8+ (if using `useLiveQuery`)
 
 ## License

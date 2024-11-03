@@ -1,19 +1,29 @@
 {
   "name": "dexie-worker",
-  "version": "1.0.1",
-  "description": "A lightweight library for managing IndexedDB in a Web Worker using Dexie.js, optimized for React applications. It offers reactive database access with RxJS and Dexie hooks, providing efficient data handling in the background without blocking the main thread.",
+  "version": "1.1.0",
+  "description": "A library for managing IndexedDB in a Web Worker using Dexie.js, optimized for React applications. It offers reactive database access with RxJS and Dexie hooks, providing efficient data handling in the background without blocking the main thread.",
   "main": "dist/dexie-worker.umd.js",
   "module": "dist/dexie-worker.es.js",
   "types": "dist/index.d.ts",
+  "type": "module",
+  "bin": {
+    "generate-dexie-worker": "bin/generateWebWorker.js"
+  },
   "scripts": {
-    "build": "vite build && tsc --emitDeclarationOnly --outDir dist",
+    "build": "node src/scripts/generateWebWorkerDev.js && vite build && tsc --emitDeclarationOnly --outDir dist && tsx ./src/scripts/buildWorker.ts",
     "gen-worker": "tsc .\\src\\dbWorker.ts --module es6 --target es6",
     "lint": "eslint . --ext .ts,.tsx"
   },
   "files": [
     "dist"
   ],
-  "keywords": ["dexie", "indexeddb", "web-worker", "database", "dexie js"],
+  "keywords": [
+    "dexie",
+    "indexeddb",
+    "web-worker",
+    "database",
+    "dexie js"
+  ],
   "author": {
     "name": "Parsa Gholipour",
     "email": "12parsaaa@gmail.com"
@@ -25,12 +35,15 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
-    "@types/node": "^22.7.5",
+    "@types/node": "^22.8.5",
     "@typescript-eslint/eslint-plugin": "^8.11.0",
     "@typescript-eslint/parser": "^8.11.0",
+    "esbuild": "^0.24.0",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.37.2",
+    "ts-node": "^10.9.2",
     "tslib": "^2.7.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.9"
   },
