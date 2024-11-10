@@ -23,6 +23,44 @@ import esbuild from 'esbuild';
   // Write the entry file
   fs.writeFileSync(tempEntryFile, entryFileContent);
 
+  // This plugin helps to support dexie-relationships
+  const replaceDexieImportsWithGlobal = {
+    name: 'replace-dexie-imports-with-global',
+    setup(build) {
+      // Intercept loading of all JavaScript and TypeScript files
+      build.onLoad({ filter: /\.(js|ts)$/, namespace: 'file' }, async (args) => {
+        let contents = await fs.promises.readFile(args.path, 'utf8');
+
+        contents = contents.replace(
+          /import\s+Dexie\s+from\s+['"]dexie['"];?/g,
+          'const Dexie = self.Dexie;'
+        );
+        contents = contents.replace(
+          /import\s+\*\s+as\s+Dexie\s+from\s+['"]dexie['"];?/g,
+          'const Dexie = self.Dexie;'
+        );
+        contents = contents.replace(
+          /import\s+\{[^}]*\}\s+from\s+['"]dexie['"];?/g,
+          ''
+        );
+        contents = contents.replace(
+          /import\s+['"]dexie['"];?/g,
+          ''
+        );
+        contents = contents.replace(
+          /require\(['"]dexie['"]\)/g,
+          'self.Dexie'
+        );
+
+        return {
+          contents,
+          loader: args.path.endsWith('.ts') ? 'ts' : 'js',
+        };
+      });
+    },
+  };
+
+
   // Bundle the entry file
   const result = await esbuild.build({
     entryPoints: [tempEntryFile],
@@ -35,8 +73,9 @@ import esbuild from 'esbuild';
       '.js': 'js',
       '.ts': 'ts',
     },
-    external: ['dexie'],
-    banner: { js: '' }
+    banner: { js: '' },
+    plugins: [replaceDexieImportsWithGlobal],
+    external: ['dexie']
   });
 
   // Get the bundled code

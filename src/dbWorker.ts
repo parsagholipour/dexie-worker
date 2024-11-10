@@ -1,4 +1,5 @@
 import Dexie, { DBCore, DBCoreMutateRequest } from 'dexie';
+import dexieRelationships from 'dexie-relationships'
 
 // Declare variables to hold the Dexie database instance and its schema
 let db: Dexie | null = null;
@@ -54,7 +55,7 @@ self.onmessage = async (event: MessageEvent) => {
 function initializeDatabase(schema: any): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
-      db = new Dexie(schema.name);
+      db = new Dexie(schema.name, {addons: [dexieRelationships]});
 
       db.version(schema.version).stores(schema.stores);
 

@@ -1,4 +1,4 @@
-import Dexie, {DBCore, DBCoreMutateRequest} from 'dexie';
+import Dexie, {DBCore, DBCoreMutateRequest, IndexSpec} from 'dexie';
 import getWorkerCode from "./getWorkerCode";
 import {ChainItem, DbSchema, DexieWorkerOptions, WorkerMessage, WorkerResponse} from './types/common'
 import {FALLBACK_METHODS} from "./const";
@@ -30,13 +30,13 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
         if (options?.dexieVersion) {
           workerCode = workerCode.replace('3.2.2', options.dexieVersion!)
         }
-        const blob = new Blob([workerCode], { type: 'text/javascript' });
+        const blob = new Blob([workerCode], {type: 'text/javascript'});
         workerURL = URL.createObjectURL(blob);
       }
 
-      worker = new Worker(workerURL, { type: 'classic' });
+      worker = new Worker(workerURL, {type: 'classic'});
       worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-        const { id, result, error, type, changedTables } = event.data;
+        const {id, result, error, type, changedTables} = event.data;
         if (type === 'init') {
           resolve(worker!);
         } else {
@@ -45,7 +45,7 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
           }
           const pending = pendingMessages.get(id);
           if (pending) {
-            const { resolve: res, reject: rej } = pending;
+            const {resolve: res, reject: rej} = pending;
             pendingMessages.delete(id);
             if (error) {
               rej(new Error(error));
@@ -71,7 +71,7 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
 
       // Initialize the worker with the database schema
       const initId = messageId++;
-      worker.postMessage({ id: initId, type: 'init', schema: dbSchema } as WorkerMessage);
+      worker.postMessage({id: initId, type: 'init', schema: dbSchema} as WorkerMessage);
     });
   }
   return workerReady;
@@ -98,7 +98,8 @@ function createProxy<T>(
   chain: ChainItem[] = [],
   tableAccessCallback?: (tableName: string) => void
 ): T {
-  const proxyFunction = function () {};
+  const proxyFunction = function () {
+  };
   const proxy = new Proxy(proxyFunction, {
     get(_target, prop: string | symbol) {
       if (prop.toString() === 'then') {
@@ -113,16 +114,16 @@ function createProxy<T>(
         // At the root level, the first property access might be a table name
         tableAccessCallback(prop.toString());
       }
-      return createProxy(chain.concat({ type: 'get', prop: prop.toString() }), tableAccessCallback);
+      return createProxy(chain.concat({type: 'get', prop: prop.toString()}), tableAccessCallback);
     },
     apply(_target, _thisArg, args: any[]) {
       const lastItem = chain[chain.length - 1];
       let newChain: ChainItem[];
       if (lastItem && lastItem.type === 'get') {
         const methodName = lastItem.prop!;
-        newChain = chain.slice(0, -1).concat({ type: 'call', method: methodName, args });
+        newChain = chain.slice(0, -1).concat({type: 'call', method: methodName, args});
       } else {
-        newChain = chain.concat({ type: 'call', method: '<anonymous>', args });
+        newChain = chain.concat({type: 'call', method: '<anonymous>', args});
       }
       return createProxy(newChain, tableAccessCallback);
     },
@@ -140,8 +141,8 @@ async function executeChain(chain: ChainItem[]): Promise<any> {
   const _worker: any = await workerReady;
   return new Promise((resolve, reject) => {
     const id = messageId++;
-    pendingMessages.set(id, { resolve, reject });
-    _worker!.postMessage({ id, type: 'execute', chain } as WorkerMessage);
+    pendingMessages.set(id, {resolve, reject});
+    _worker!.postMessage({id, type: 'execute', chain} as WorkerMessage);
   });
 }
 
@@ -239,14 +240,23 @@ function extractSchema(dbInstance: Dexie): DbSchema {
     stores: {},
   };
 
-  dbInstance.tables.forEach((table) => {
-    const tableName = table.name;
-    let storeDef = table.schema.primKey.src;
-    if (table.schema.indexes.length > 0) {
-      storeDef += ',' + table.schema.indexes.map((idx) => idx.src).join(',');
-    }
+  // Access internal Dexie properties
+  const dbSchema = dbInstance._dbSchema; // Internal property
+
+  for (const tableName in dbSchema) {
+    const tableSchema = dbSchema[tableName];
+    // Reconstruct the store definition including annotations
+    const primKey = tableSchema.primKey.src;
+
+    // @ts-ignore
+    const indexes = tableSchema.indexes.filter(idx => !idx.foreignKey).map((idx: IndexSpec & { foreignKey: any }) => idx.src);
+    // @ts-ignore
+    const foreignKeys = tableSchema.indexes.filter(idx => idx.foreignKey).map((idx: IndexSpec & {
+      foreignKey: any
+    }) => idx.foreignKey && (idx.foreignKey.index + '->' + idx.foreignKey.targetTable + '.' + idx.foreignKey.targetIndex));
+    const storeDef = Array.from(new Set([primKey, ...indexes, ...foreignKeys])).join(',');
     schema.stores[tableName] = storeDef;
-  });
+  }
 
   return schema;
 }
@@ -270,4 +280,4 @@ function removeChangeListener(listener: (changedTables: Set<string>) => void): v
   }
 }
 
-export { createProxy, addChangeListener, removeChangeListener };
+export {createProxy, addChangeListener, removeChangeListener};
