@@ -99,7 +99,7 @@ For advanced usage, dexie-worker exports the liveQuery function, allowing you to
 import { liveQuery } from "dexie-worker";
 
 // Create a custom live query
-const userLiveData = liveQuery(() => db.users.where("age").above(18).toArray());
+const userLiveData = liveQuery((db) => db.users.where("age").above(18).toArray());
 
 // Subscription to the live query
 userLiveData.subscribe({
