@@ -128,36 +128,38 @@ This will no longer use code injection.
 ### Custom Operations
 You can create custom operations to run within the web worker to improve performance and extend support to cases that are otherwise unsupported due to limitations in communicating with the web worker, such as the inability to pass callbacks (e.g., with methods like [each](https://dexie.org/docs/Collection/Collection.each())).
 To get started, follow these steps:
-1. Create a `dexieOperations.js`(or `.ts`) file with your custom operations:
+1. Create a `dexie-worker.config.js`(or `.ts`) file with your custom operations:
 ```ts
 import Dexie from "dexie";
 import map from "lodash.map"; // you can use external libraries
 
 export default {
-  async runBulkOperationInWorkerExample(dexie: Dexie, arg1: any, arg2: any) {
-    const oldUsers = await dexie.users.toArray();
+  operations: {
+    async runBulkOperationInWorkerExample(dexie: Dexie, arg1: any, arg2: any) {
+      const oldUsers = await dexie.users.toArray();
 
-    const newUsers = map(oldUsers, user => ({
-      ...user,
-      isActive: true,
-    }));
+      const newUsers = map(oldUsers, user => ({
+        ...user,
+        isActive: true,
+      }));
 
-    await dexie.transaction('rw', dexie.usersV2, async () => {
-      await dexie.usersV2.bulkPut(newUsers);
-    });
-    
-    return 'A seralizable result' // e.g Objects, Arrays, Strings, etc. To learn more about not supported types refer to https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#things_that_dont_work_with_structured_clone
-  },
-  // ...other methods
+      await dexie.transaction('rw', dexie.usersV2, async () => {
+        await dexie.usersV2.bulkPut(newUsers);
+      });
+
+      return 'A seralizable result' // e.g Objects, Arrays, Strings, etc. To learn more about not supported types refer to https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#things_that_dont_work_with_structured_clone
+    },
+    // ...other methods
+  }
 }
 ```
 2. Generate the web worker file:
 ```bash
-generate-dexie-worker ./path/to/dexieOperations.js
+generate-dexie-worker ./path/to/dexie-worker.config.js
 ```
 Note: The command automatically detects your Dexie version from package.json, but you can specify a version manually:
 ```bash
-npx generate-dexie-worker ./path/to/dexieOperations.js "3.2.2"
+npx generate-dexie-worker ./path/to/dexie-worker.config.js "3.2.2"
 ```
 3. Place the generated file in a publicly accessible location(e.g. http://localhost/dexieWorker.js)
 4. initialize the dexie worker with the following options:

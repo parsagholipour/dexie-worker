@@ -8,7 +8,7 @@ import {readFile} from 'fs/promises';
 
 (async () => {
   const args = process.argv.slice(2);
-  const operationsPath = args[0];
+  const configPath = args[0] || 'dexie-worker.config.js';
   let dexieVersion = args[1];
 
   const __filename = fileURLToPath(import.meta.url);
@@ -26,15 +26,15 @@ import {readFile} from 'fs/promises';
   let entryFileContent = '';
 
   // Import the operations module if provided
-  if (operationsPath) {
-    const operationsFullPath = path.resolve(process.cwd(), operationsPath);
+  if (configPath) {
+    const operationsFullPath = path.resolve(process.cwd(), configPath);
 
     const operationsImportPath = operationsFullPath.replace(/\\/g, '/');
 
-    entryFileContent += `import operationsModule from '${operationsImportPath}';\n`;
-    entryFileContent += `const operations = operationsModule.default || operationsModule;\n`;
+    entryFileContent += `import configModule from '${operationsImportPath}';\n`;
+    entryFileContent += `const configs = configModule.default || configModule;\n`;
   } else {
-    entryFileContent += `const operations = [];\n`;
+    entryFileContent += `const configModule = {operations: []};\n`;
   }
 
   // Import dexieWorker.js content

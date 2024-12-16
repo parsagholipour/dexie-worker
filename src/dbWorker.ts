@@ -1,5 +1,4 @@
 import Dexie, { DBCore, DBCoreMutateRequest } from 'dexie';
-import dexieRelationships from 'dexie-relationships'
 
 // Declare variables to hold the Dexie database instance and its schema
 let db: Dexie | null = null;
@@ -55,7 +54,7 @@ self.onmessage = async (event: MessageEvent) => {
 function initializeDatabase(schema: any): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
-      db = new Dexie(schema.name, {addons: [dexieRelationships]});
+      db = new Dexie(schema.name);
 
       db.version(schema.version).stores(schema.stores);
 
@@ -107,6 +106,15 @@ function notifyChanges(changedTables: Set<string>) {
   });
 }
 
+function getConfig(key: string) {
+  // @ts-ignore
+  if (typeof configModule !== 'undefined') {
+    // @ts-ignore
+    return configModule[key]
+  }
+  return null
+}
+
 async function executeChain(chain: any[]) {
   let context: any = db;
   for (const item of chain) {
@@ -121,10 +129,9 @@ async function executeChain(chain: any[]) {
       }
     } else if (item.type === 'call') {
       if (item.method === 'operation') {
+        const operations = getConfig('operations')
         //Call a custom operation defined by the user
-        // @ts-ignore
-        if (typeof operations !== 'undefined' && typeof operations[item.args[0]] === 'function') {
-          // @ts-ignore
+        if (operations && typeof operations[item.args[0]] === 'function') {
           context = operations[item.args[0]](context, ...item.args.slice(1))
           if (context && typeof context.then === 'function') {
             context = await context;
