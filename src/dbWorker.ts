@@ -139,7 +139,7 @@ async function executeChain(chain: any[]) {
         } else {
           // @ts-ignore
           const errorText = typeof operations === 'undefined' ? 'Operations is not defined. Please generate the worker file by supplying a valid \'operations\' file.' :
-            'Function name' + item.args[0] + 'is not defined in the operations file. Have you generated a new worker after updating your operations file?';
+            'The function name ' + item.args[0] + ' is not defined in the operations file. Have you generated a new worker after updating your operations file?';
           throw new Error(errorText)
         }
       } else if (typeof context[item.method] === 'function') {
