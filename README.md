@@ -41,6 +41,8 @@ function createDatabase() {
   return db;
 }
 
+const _db = createDatabase();
+_db.open(); // initialize database
 // Initialize with Web Worker DB insance
 const db = getWebWorkerDB(createDatabase());
 ```
@@ -65,10 +67,10 @@ class MyDatabase extends Dexie {
   }
 }
 
+const _db = new MyDatabase();
+_db.open(); // initialize database
 // Initialize with Web Worker support
-const db = getWebWorkerDB(new MyDatabase(), {
-  dexieVersion: 'latest' // Use 'latest' or a specific version like '4.0.9 - it should be accessible from the url: https://cdn.jsdelivr.net/npm/dexie@{YOUR VERSION}/dist/dexie.min.js
-});
+const db = getWebWorkerDB(_db);
 ```
 
 With this setup, you're free to use a function-based approach to organize and create multiple Dexie instances or handle conditional setups within your application.
