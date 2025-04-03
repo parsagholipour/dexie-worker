@@ -9,7 +9,7 @@ export default defineConfig({
       entry: path.resolve(__dirname, 'src/index.ts'),
       name: 'DexieWorker',
       fileName: (format) => `dexie-worker.${format}.js`,
-      formats: ['umd', 'es'],
+      formats: ['umd', 'es', 'cjs'],
     },
     rollupOptions: {
       external: ['dexie', 'react', 'rxjs', 'dexie-react-hooks'],
