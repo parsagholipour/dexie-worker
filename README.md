@@ -56,9 +56,6 @@ Alternatively, you can integrate `dexie-worker` in your Dexie project with a cla
 ```javascript
 import Dexie from "dexie";
 import { getWebWorkerDB } from "dexie-worker";
-// if you get an error importing like this, try the following:
-// import * as dexieWorker from "dexie-worker";
-// const { getWebWorkerDB } = dexieWorker;
 
 // Define your Dexie subclass
 class MyDatabase extends Dexie {
