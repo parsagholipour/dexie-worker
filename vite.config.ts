@@ -1,10 +1,10 @@
 import { defineConfig } from 'vite';
 import path from 'path';
 
-export default defineConfig({
+export default defineConfig(({mode}) => ({
   build: {
     sourcemap: true,
-    minify: false,
+    minify: mode === 'production',
     lib: {
       entry: path.resolve(__dirname, 'src/index.ts'),
       name: 'DexieWorker',
@@ -12,18 +12,10 @@ export default defineConfig({
       formats: ['umd', 'es', 'cjs'],
     },
     rollupOptions: {
-      external: ['dexie', 'react', 'rxjs', 'dexie-react-hooks'],
-      output: {
-        globals: {
-          dexie: 'Dexie',
-          react: 'React',
-          rxjs: 'rxjs',
-          'dexie-react-hooks': 'dexieReactHooks',
-        },
-      },
+      external: ['dexie', 'react', /rxjs/, 'dexie-react-hooks'],
     },
   },
   worker: {
     format: 'es',
   },
-});
+}));

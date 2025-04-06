@@ -1,6 +1,6 @@
 {
   "name": "dexie-worker",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "A library for managing IndexedDB in a Web Worker using Dexie.js, optimized for React applications. It offers reactive database access with RxJS and Dexie hooks, providing efficient data handling in the background without blocking the main thread.",
   "main": "dist/dexie-worker.umd.js",
   "module": "dist/dexie-worker.es.js",
@@ -34,11 +34,11 @@
   },
   "license": "MIT",
   "dependencies": {
-    "dexie": "^3.2.4",
-    "dexie-react-hooks": "^1.0.0",
-    "rxjs": "^7.8.1"
   },
   "devDependencies": {
+    "dexie": "^3.2.4",
+    "dexie-react-hooks": "^1.0.0",
+    "rxjs": "^7.8.1",
     "@types/node": "^22.8.5",
     "@typescript-eslint/eslint-plugin": "^8.11.0",
     "@typescript-eslint/parser": "^8.11.0",
@@ -52,9 +52,9 @@
     "vite": "^5.4.9"
   },
   "peerDependencies": {
-    "dexie": "^3.2.4",
-    "dexie-react-hooks": "^1.0.0",
-    "rxjs": "^7.8.1"
+    "dexie": "*",
+    "dexie-react-hooks": "*",
+    "rxjs": ">=5.0.0"
   },
   "peerDependenciesMeta": {
     "rxjs": {
