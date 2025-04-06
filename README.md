@@ -6,6 +6,8 @@ dexie-worker is an extension package for <a href="https://dexie.org/" target="_b
 
 - **Web Worker Integration**: Run Dexie.js in a Web Worker to improve app performance and responsiveness.
 - **React Hook Support**: Use `useLiveQuery` to fetch and subscribe to live data changes, optimized for a Web Worker context.
+- **Minimal Size**: Only 2.9KB gzipped.
+
 
 ## Installation
 
