@@ -155,7 +155,7 @@ async function executeChain(chain: any[]) {
 
   // Ensure the result is serializable before returning
   if (!isSerializable(context)) {
-    throw new Error('Result is not serializable.', context);
+    throw new Error(`Result is not serializable. Chain: ${JSON.stringify(chain)}`, context);
   }
 
   return context;
