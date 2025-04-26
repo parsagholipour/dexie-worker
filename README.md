@@ -3,13 +3,6 @@
 
 dexie-worker is an extension package for <a href="https://dexie.org/" target="_blank">Dexie.js</a> that enables Dexie to work in a Web Worker environment, allowing for handling of IndexedDB operations without blocking the UI.
 
-## ✨ Features
-
-- **Web Worker Integration**: Run Dexie.js in a Web Worker to improve app responsiveness.
-- **React Hook Support**: Use `useLiveQuery` to fetch and subscribe to live data changes.
-- **Framework-Agnostic Query Subscription**: Real-time updates with `liveQuery` 
-
-
 ## 📦 Installation
 
 Install the package via npm:
@@ -20,16 +13,8 @@ npm i dexie-worker
 
 ## 🛠️ Usage
 
-To get started with dexie-worker, import `getWebWorkerDB` to set up Dexie in a Web Worker context and enjoy a non-blocking database experience.
-
-### Basic Setup
-
-1. Define Your Dexie Database: Create a Dexie subclass or use a function-based approach to define your database schema.
+1. Define Your Dexie Database
 2. Initialize with Web Worker: Use `getWebWorkerDB` to enable Web Worker functionality for your Dexie instance.
-
-#### Example 1: Function-Based Dexie Database
-
-Here’s a basic setup for integrating dexie-worker in your project:
 
 ```javascript
 import Dexie from "dexie";
@@ -141,6 +126,13 @@ const db = getWebWorkerDB(dexieDb, {
 ```js
 const result = db.operation('runBulkOperationInWorkerExample', arg1, arg2)
 ```
+
+## ✨ Features
+
+- **Web Worker Integration**: Run Dexie.js in a Web Worker to improve app responsiveness.
+- **React Hook Support**: Use `useLiveQuery` to fetch and subscribe to live data changes.
+- **Framework-Agnostic Query Subscription**: Real-time updates with `liveQuery`
+
 ## API
 
 ### getWebWorkerDB(dbInstance)
