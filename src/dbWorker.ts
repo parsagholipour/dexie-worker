@@ -1,5 +1,9 @@
 import Dexie, { DBCore, DBCoreMutateRequest } from 'dexie';
 
+interface MessageListenerOptions {
+  operations?: Record<string, any>;
+}
+
 // Declare variables to hold the Dexie database instance and its schema
 let db: Dexie | null = null;
 let dbReadyPromise: Promise<void> | null = null;
@@ -8,49 +12,51 @@ let dbInitializing = false;
 // Keep track of connected clients to send change notifications
 const connectedClients = new Set<number>();
 
-// Handle messages from the main thread
-self.onmessage = async (event: MessageEvent) => {
-  const { id, chain, schema, type } = event.data;
+const getMessageListener = (options?: MessageListenerOptions) => {
+  return async (event: MessageEvent) => {
+    const { id, chain, schema, type } = event.data;
 
-  try {
-    if (type === 'init') {
-      if (dbInitializing) {
-        postMessage({ id, result: 'Database is initializing', type: 'initializing' });
+    try {
+      if (type === 'init') {
+        if (dbInitializing) {
+          postMessage({ id, result: 'Database is initializing', type: 'initializing' });
+        }
+        else if (db) {
+          postMessage({ id, result: 'Database already initialized', type: 'init' });
+        } else {
+          dbInitializing = true;
+          connectedClients.add(id); // Add client to connected clients
+          dbReadyPromise = initializeDatabase(schema)
+            .then(() => {
+              dbInitializing = false;
+            })
+            .catch((error) => {
+              dbInitializing = false;
+              db = null;
+              throw error;
+            });
+          await dbReadyPromise;
+          postMessage({ id, result: 'Database initialized', type: 'init' });
+        }
+      } else if (type === 'execute') {
+        if (dbReadyPromise) {
+          await dbReadyPromise;
+        }
+        if (!db) {
+          throw new Error('Database is not initialized.');
+        }
+        const result = await executeChain(chain, options?.operations);
+        postMessage({ id, result, type: 'result' });
+      } else if (type === 'disconnect') {
+        connectedClients.delete(id);
       }
-      else if (db) {
-        postMessage({ id, result: 'Database already initialized', type: 'init' });
-      } else {
-        dbInitializing = true;
-        connectedClients.add(id); // Add client to connected clients
-        dbReadyPromise = initializeDatabase(schema)
-          .then(() => {
-            dbInitializing = false;
-          })
-          .catch((error) => {
-            dbInitializing = false;
-            db = null;
-            throw error;
-          });
-        await dbReadyPromise;
-        postMessage({ id, result: 'Database initialized', type: 'init' });
-      }
-    } else if (type === 'execute') {
-      if (dbReadyPromise) {
-        await dbReadyPromise;
-      }
-      if (!db) {
-        throw new Error('Database is not initialized.');
-      }
-      const result = await executeChain(chain);
-      postMessage({ id, result, type: 'result' });
-    } else if (type === 'disconnect') {
-      connectedClients.delete(id);
+    } catch (error) {
+      postMessage({ id, error: (error as any).message, type: 'error' });
     }
-  } catch (error) {
-    postMessage({ id, error: (error as any).message, type: 'error' });
   }
 };
 
+self.onmessage = getMessageListener()
 function initializeDatabase(schema: any): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
@@ -115,7 +121,7 @@ function getConfig(key: string) {
   return null
 }
 
-async function executeChain(chain: any[]) {
+async function executeChain(chain: any[], _operations?: Record<string, any>) {
   let context: any = db;
   for (const item of chain) {
     if (item.type === 'get') {
@@ -129,7 +135,7 @@ async function executeChain(chain: any[]) {
       }
     } else if (item.type === 'call') {
       if (item.method === 'operation') {
-        const operations = getConfig('operations')
+        const operations = _operations || getConfig('operations')
         //Call a custom operation defined by the user
         if (operations && typeof operations[item.args[0]] === 'function') {
           context = operations[item.args[0]](context, ...item.args.slice(1))
@@ -155,7 +161,7 @@ async function executeChain(chain: any[]) {
 
   // Ensure the result is serializable before returning
   if (!isSerializable(context)) {
-    throw new Error(`Result is not serializable. Chain: ${JSON.stringify(chain)}`, context);
+    throw new Error('Result is not serializable. Chain: ' + JSON.stringify(chain), context);
   }
 
   return context;
@@ -169,3 +175,5 @@ function isSerializable(value: any): boolean {
     return false;
   }
 }
+
+export {getMessageListener}

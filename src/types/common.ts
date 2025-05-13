@@ -29,5 +29,6 @@ export interface DbSchema {
 
 export interface DexieWorkerOptions {
   workerUrl?: string,
+  worker?: Worker;
   dexieVersion?: string;
 }

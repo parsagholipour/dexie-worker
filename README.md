@@ -64,7 +64,31 @@ userLiveData.subscribe({
 
 ### 🔐 Content Security Policies
 This library uses code injection to execute the web worker, which may not comply with [Content Security Policy (CSP)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) if your website uses one. To ensure CSP compliance, please follow the [Generate Web Worker File section](#generate-web-worker-file).
-### Generate Web Worker File
+### 1. Using your own Web Worker
+This example uses Vite. Modify the code to suit your environment.
+`worker.ts`:
+```ts
+import {getMessageListener} from 'dexie-worker'
+
+self.addEventListener('message', getMessageListener({
+  operations: {
+    async myExampleOperation(dexie, arg1, arg2) {
+      // ...
+    }
+  }
+}))
+```
+`main.ts`
+```ts
+import DexieWorker from './worker.ts?worker'
+const workerDB = getWebWorkerDB(db, {
+  worker: new DexieWorker(),
+});
+// You can call the operations as the following
+await workerDB.operation('myExampleOperation', 1, 2)
+```
+
+### 2. Generate Web Worker File (Alternative)
 To generate a web worker file, execute the following 
 ```bash
 generate-dexie-worker
@@ -80,8 +104,7 @@ const db = getWebWorkerDB(dexieDb, {
 This will no longer use code injection.
 
 ### Custom Operations
-You can create custom operations to run within the web worker to improve performance and extend support to cases that are otherwise unsupported due to limitations in communicating with the web worker, such as the inability to pass callbacks (e.g., with methods like [each](https://dexie.org/docs/Collection/Collection.each())).
-To get started, follow these steps:
+You can create custom operations to run within the web worker to improve performance and extend support to cases that are otherwise unsupported due to limitations in communicating with the web worker, such as the inability to pass callbacks (e.g., with methods like [each](https://dexie.org/docs/Collection/Collection.each())). You can follow [this](#1-using-your-own-web-worker) or follow these steps:
 1. Create a `dexie-worker.config.js`(or `.ts`) file with your custom operations:
 ```ts
 import Dexie from "dexie";

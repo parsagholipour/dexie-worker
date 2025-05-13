@@ -22,20 +22,21 @@ const changeListeners: Array<(changedTables: Set<string>) => void> = [];
 function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerOptions): Promise<Worker> {
   if (!workerReady) {
     workerReady = new Promise<Worker>((resolve) => {
-      let workerURL;
-      if (options?.workerUrl) {
-        workerURL = options?.workerUrl;
-      } else {
-        let workerCode = getWorkerCode();
-        if (options?.dexieVersion) {
-          workerCode = workerCode.replace('3.2.2', options.dexieVersion!)
+      let workerURL = '';
+      if (!options?.worker) {
+        if (options?.workerUrl) {
+          workerURL = options.workerUrl!;
+        } else {
+          let workerCode = getWorkerCode();
+          if (options?.dexieVersion) {
+            workerCode = workerCode.replace('3.2.2', options.dexieVersion!)
+          }
+          const blob = new Blob([workerCode], {type: 'text/javascript'});
+          workerURL = URL.createObjectURL(blob);
         }
-        const blob = new Blob([workerCode], {type: 'text/javascript'});
-        workerURL = URL.createObjectURL(blob);
       }
 
-      worker = new Worker(workerURL, {type: 'classic'});
-      worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      const workerMessageHandler = (event: MessageEvent<WorkerResponse>) => {
         const {id, result, error, type, changedTables} = event.data;
         if (type === 'init') {
           resolve(worker!);
@@ -60,7 +61,10 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
           const changedTablesSet = new Set<string>(changedTables);
           changeListeners.forEach((listener) => listener(changedTablesSet));
         }
-      };
+      }
+      worker = options?.worker ?? new Worker(workerURL, {type: 'classic'})
+      worker.onmessage = workerMessageHandler;
+
 
       // Extract the schema from the existing Dexie instance
       const dbSchema = extractSchema(dbInstance);

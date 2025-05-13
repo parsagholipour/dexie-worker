@@ -83,6 +83,9 @@ import esbuild from 'esbuild';
   bundledCode = bundledCode.replace(/"use strict";\n?/, '');
   bundledCode = bundledCode.replace(/import Dexie from "dexie";\n?/, '');
   bundledCode = bundledCode.replace(/\/\/ tempDexieWorkerEntry.ts\n?/, '');
+  bundledCode = bundledCode.replace(`export {
+  getMessageListener
+};`, '');
   bundledCode = `
 importScripts('https://cdn.jsdelivr.net/npm/dexie@3.2.2/dist/dexie.min.js');
   ${bundledCode}
@@ -98,6 +101,7 @@ importScripts('https://cdn.jsdelivr.net/npm/dexie@3.2.2/dist/dexie.min.js');
 
   // Clean up the temporary entry file
   fs.unlinkSync(tempEntryFile);
+  fs.unlinkSync(destDexieWorkerPath);
 
   console.log('dexieWorker.js generated successfully.');
 })();
