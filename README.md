@@ -63,7 +63,7 @@ userLiveData.subscribe({
 ```
 
 ### 🔐 Content Security Policies
-This library uses code injection to execute the web worker, which may not comply with [Content Security Policy (CSP)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) if your website uses one. To ensure CSP compliance, please follow the [Generate Web Worker File section](#generate-web-worker-file).
+This library uses code injection to execute the web worker, which may not comply with [Content Security Policy (CSP)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) if your website uses one. To ensure CSP compliance, please follow:
 ### 1. Using your own Web Worker
 This example uses Vite. Modify the code to suit your environment.
 `worker.ts`:
