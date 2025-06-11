@@ -147,7 +147,7 @@ const db = getWebWorkerDB(dexieDb, {
 ```
 5. Call your custom operations:
 ```js
-const result = db.operation('runBulkOperationInWorkerExample', arg1, arg2)
+const result = await db.operation('runBulkOperationInWorkerExample', arg1, arg2)
 ```
 
 ## ✨ Features
