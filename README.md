@@ -1,7 +1,7 @@
 # dexie-worker
 ### <a href="https://codesandbox.io/p/sandbox/pf8hr6" target="_blank">🌐 Live Demo</a>
 
-dexie-worker is an extension package for <a href="https://dexie.org/" target="_blank">Dexie.js</a> that enables Dexie to work in a Web Worker environment, allowing for handling of IndexedDB operations without blocking the UI.
+dexie-worker is an extension package for <a href="https://dexie.org/" target="_blank">Dexie.js</a> that creates a proxy in the main thread but executes the dexie queries in a a web worker, allowing for handling of IndexedDB operations without blocking the UI.
 
 ## 📦 Installation
 
