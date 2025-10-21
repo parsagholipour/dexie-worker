@@ -12,7 +12,7 @@ export default defineConfig(({mode}) => ({
       formats: ['umd', 'es', 'cjs'],
     },
     rollupOptions: {
-      external: ['dexie', 'react'],
+      external: ['dexie', 'react', /rxjs/, 'dexie-react-hooks'],
     },
   },
   worker: {
