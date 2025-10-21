@@ -1,7 +1,8 @@
-import Dexie, {DBCore, DBCoreMutateRequest, IndexSpec} from 'dexie';
+import Dexie, {DBCore, DBCoreMutateRequest, IndexSpec, ObservabilitySet} from 'dexie';
 import getWorkerCode from "./getWorkerCode";
 import {ChainItem, DbSchema, DexieWorkerOptions, WorkerMessage, WorkerResponse} from './types/common'
 import {FALLBACK_METHODS} from "./const";
+import {supportsBroadcastChannel} from "./helpers";
 
 // Variables to manage the worker and message handling
 let worker: Worker | null = null;
@@ -142,6 +143,9 @@ function createProxy<T>(
  * @returns A promise that resolves with the result of the execution.
  */
 async function executeChain(chain: ChainItem[]): Promise<any> {
+  if (workerReady === undefined) {
+    throw new Error('You cannot call `useLiveQuery` before web worker initialization (call `getWebWorkerDB` first)')
+  }
   const _worker: any = await workerReady;
   return new Promise((resolve, reject) => {
     const id = messageId++;
@@ -203,6 +207,26 @@ async function executeOnMainThread(chain: ChainItem[]): Promise<any> {
  * @param db - The Dexie database instance to which the middleware will be attached.
  */
 function addChangeTrackingMiddleware(db: Dexie) {
+  if (supportsBroadcastChannel()) {
+    try {
+      Dexie.on('storagemutated', (changedParts: ObservabilitySet) => {
+        const changedTables = new Set<string>();
+        Object.keys(changedParts || {}).forEach(key => {
+          const tableName = key.split('/')[3];
+          changedTables.add(tableName);
+        })
+        if (changedTables.size > 0) {
+          changeListeners.forEach((listener) => listener(changedTables));
+        }
+      })
+
+      return;
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (e) { /* storagemutated event is not supported */ }
+  }
+
+  // fallback method of listening to table changes
   db.use({
     stack: 'dbcore',
     name: 'ChangeTrackingMiddleware',
@@ -219,8 +243,7 @@ function addChangeTrackingMiddleware(db: Dexie) {
                 // After the mutation, notify the main thread
                 const changedTables = new Set<string>();
                 changedTables.add(tableName);
-                const changedTablesSet = new Set<string>(changedTables);
-                changeListeners.forEach((listener) => listener(changedTablesSet));
+                changeListeners.forEach((listener) => listener(changedTables));
                 return res;
               });
             },
