@@ -212,8 +212,12 @@ function addChangeTrackingMiddleware(db: Dexie) {
       Dexie.on('storagemutated', (changedParts: ObservabilitySet) => {
         const changedTables = new Set<string>();
         Object.keys(changedParts || {}).forEach(key => {
-          const tableName = key.split('/')[3];
-          changedTables.add(tableName);
+          const splitKey = key.split('/');
+          const tableName = splitKey[3];
+          const dbName = splitKey[2];
+          if (dbName === db.name) {
+            changedTables.add(tableName);
+          }
         })
         if (changedTables.size > 0) {
           changeListeners.forEach((listener) => listener(changedTables));
