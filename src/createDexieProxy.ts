@@ -90,6 +90,9 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
 export default function createDexieProxy<T extends Dexie>(dbInstance: T, options?: DexieWorkerOptions): T {
   // support for test environments
   if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+    if (!options?.silenceWarning) {
+      console.warn('Dexie worker cannot be run in a non-browser environment.')
+    }
     return dbInstance;
   }
 

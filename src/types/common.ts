@@ -31,4 +31,5 @@ export interface DexieWorkerOptions {
   workerUrl?: string,
   worker?: Worker;
   dexieVersion?: string;
+  silenceWarning?: boolean;
 }
