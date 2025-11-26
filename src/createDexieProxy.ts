@@ -88,6 +88,11 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
  * @returns A proxy that represents the Dexie database.
  */
 export default function createDexieProxy<T extends Dexie>(dbInstance: T, options?: DexieWorkerOptions): T {
+  // support for test environments
+  if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+    return dbInstance;
+  }
+
   initializeWorker<T>(dbInstance, options);
 
   return createProxy<T>();
