@@ -151,6 +151,10 @@ const db = getWebWorkerDB(dexieDb, {
 const result = await db.operation('runBulkOperationInWorkerExample', arg1, arg2)
 ```
 
+### How not to depend on `jsDelivr` in your worker
+1. [Generate a web worker file](https://github.com/parsagholipour/dexie-worker#2-generate-web-worker-file-alternative)
+2. Edit the generated file (e.g. `dexieWorker.js`) and change the `jsDelivr` URL with your own hosted file.
+
 ## ✨ Features
 
 - **Web Worker Integration**: Run Dexie.js in a Web Worker to improve app responsiveness.
