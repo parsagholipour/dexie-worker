@@ -25,16 +25,22 @@ import {readFile} from 'fs/promises';
 
   let entryFileContent = '';
 
-  // Import the operations module if provided
-  if (configPath) {
-    const operationsFullPath = path.resolve(process.cwd(), configPath);
+  const operationsFullPath = configPath
+    ? path.resolve(process.cwd(), configPath)
+    : null;
 
+  // If the config file exists, import it; otherwise use a default
+  if (operationsFullPath && fs.existsSync(operationsFullPath)) {
     const operationsImportPath = operationsFullPath.replace(/\\/g, '/');
 
     entryFileContent += `import configModule from '${operationsImportPath}';\n`;
     entryFileContent += `const configs = configModule.default || configModule;\n`;
   } else {
-    entryFileContent += `const configModule = {operations: []};\n`;
+    // No config file – fall back to a default
+    console.warn(
+      `Config file "${configPath}" not found. Using default config (no operations).`
+    );
+    entryFileContent += `const configs = { operations: [] };\n`;
   }
 
   // Import dexieWorker.js content
