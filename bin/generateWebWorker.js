@@ -34,13 +34,13 @@ import {readFile} from 'fs/promises';
     const operationsImportPath = operationsFullPath.replace(/\\/g, '/');
 
     entryFileContent += `import configModule from '${operationsImportPath}';\n`;
-    entryFileContent += `const configs = configModule.default || configModule;\n`;
+    entryFileContent += `const configs = {...(configModule.default || configModule), watch: () => {}};\n`;
   } else {
     // No config file – fall back to a default
     console.warn(
       `Config file "${configPath}" not found. Using default config (no operations).`
     );
-    entryFileContent += `const configs = { operations: [] };\n`;
+    entryFileContent += `const configs = { operations: { watch: () => {} } };\n`;
   }
 
   // Import dexieWorker.js content

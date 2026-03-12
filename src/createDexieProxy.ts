@@ -131,6 +131,13 @@ function createProxy<T>(
     },
     apply(_target, _thisArg, args: any[]) {
       const lastItem = chain[chain.length - 1];
+      if (lastItem.prop === 'operation' && args[0] === 'watch') {
+        const tableName = args[1];
+        if (typeof tableName === 'string') {
+          tableAccessCallback?.(tableName);
+          return; // No need to create a new proxy for watch operations
+        }
+      }
       let newChain: ChainItem[];
       if (lastItem && lastItem.type === 'get') {
         const methodName = lastItem.prop!;

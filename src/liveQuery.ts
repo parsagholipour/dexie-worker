@@ -51,5 +51,5 @@ export function liveQuery<T>(querier: (db: any) => Promise<T> | T): Observable<T
       isSubscribed = false;
       removeChangeListener(changeHandler);
     };
-  }).pipe(shareReplay(1));
+  }).pipe(shareReplay({ bufferSize: 1, refCount: true }));
 }
