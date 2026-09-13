@@ -3,6 +3,7 @@ export interface WorkerMessage {
   type: string;
   chain?: ChainItem[];
   schema?: DbSchema;
+  liveQueryId?: string;
   [key: string]: string | number | DbSchema | ChainItem[] | undefined;
 }
 
@@ -12,6 +13,8 @@ export interface WorkerResponse {
   error?: string;
   type: string;
   changedTables?: string[];
+  accessedTables?: string[];
+  liveQueryId?: string;
 }
 
 export interface ChainItem {

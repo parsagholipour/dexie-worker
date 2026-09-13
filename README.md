@@ -35,6 +35,8 @@ Now, `db` will run on a separate thread.
 dexie-worker also provides a `useLiveQuery` hook for React apps, which allows you to subscribe to live query updates from the database.
 
 > ⚠️ **Warning**: Unlike the default usage in `dexie-react-hooks`, you'll need to pass the `db` instance within the callback function.
+>
+> The worker database is a plain object (not a function), so it is safe to store in React state: `setDb(getWebWorkerDB(raw))`.
 
 #### Usage Example
 
@@ -44,6 +46,9 @@ import { useLiveQuery } from "dexie-worker";
 // IMPORTANT: use "db" returned from the callback function
 const userDetails = useLiveQuery((db) => db.users.get({ id: 1 }));
 // userDetails will automatically update when data changes
+
+// Custom operations also refresh when tables they read are mutated
+const sortedUsers = useLiveQuery((db) => db.operation('filterAndSort', query));
 ```
 
 ### Custom Live Queries
@@ -149,6 +154,12 @@ const db = getWebWorkerDB(dexieDb, {
 5. Call your custom operations:
 ```js
 const result = await db.operation('runBulkOperationInWorkerExample', arg1, arg2)
+```
+
+Custom operations used inside `useLiveQuery` or `liveQuery` re-run automatically when any table they read is mutated:
+
+```js
+const sortedUsers = useLiveQuery((db) => db.operation('filterAndSort', query));
 ```
 
 ### How not to depend on `jsDelivr` in your worker

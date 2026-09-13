@@ -83,9 +83,7 @@ import esbuild from 'esbuild';
   bundledCode = bundledCode.replace(/"use strict";\n?/, '');
   bundledCode = bundledCode.replace(/import Dexie from "dexie";\n?/, '');
   bundledCode = bundledCode.replace(/\/\/ tempDexieWorkerEntry.ts\n?/, '');
-  bundledCode = bundledCode.replace(`export {
-  getMessageListener
-};`, '');
+  bundledCode = bundledCode.replace(/export\s*\{[\s\S]*?\};?/, '');
   bundledCode = `
 importScripts('https://cdn.jsdelivr.net/npm/dexie@3.2.2/dist/dexie.min.js');
   ${bundledCode}

@@ -4,10 +4,55 @@ importScripts('https://cdn.jsdelivr.net/npm/dexie@3.2.2/dist/dexie.min.js');
   var db = null;
 var dbReadyPromise = null;
 var dbInitializing = false;
+var currentLiveQueryId = null;
+var executeQueue = Promise.resolve();
 var connectedClients = /* @__PURE__ */ new Set();
+function enqueueExecute(work) {
+  const run = executeQueue.then(work, work);
+  executeQueue = run.then(() => void 0, () => void 0);
+  return run;
+}
+function isKnownTableName(name) {
+  var _a;
+  if (!db) {
+    return false;
+  }
+  if ((_a = db.tables) == null ? void 0 : _a.some((table) => table.name === name)) {
+    return true;
+  }
+  return Boolean(db._dbSchema && name in db._dbSchema);
+}
+function trackTableAccess(tableName) {
+  if (!currentLiveQueryId) {
+    return;
+  }
+  postMessage({ type: "accessedTables", liveQueryId: currentLiveQueryId, accessedTables: [tableName] });
+}
+function createDbAccessProxy(database) {
+  return new Proxy(database, {
+    get(target, prop) {
+      if (prop === "table") {
+        return (name) => {
+          if (typeof name === "string") {
+            trackTableAccess(name);
+          }
+          return target.table(name);
+        };
+      }
+      if (typeof prop === "string" && isKnownTableName(prop)) {
+        trackTableAccess(prop);
+      }
+      const value = target[prop];
+      if (typeof value === "function") {
+        return value.bind(target);
+      }
+      return value;
+    }
+  });
+}
 var getMessageListener = (options) => {
   return async (event) => {
-    const { id, chain, schema, type } = event.data;
+    const { id, chain, schema, type, liveQueryId } = event.data;
     try {
       if (type === "init") {
         if (dbInitializing) {
@@ -28,13 +73,20 @@ var getMessageListener = (options) => {
           postMessage({ id, result: "Database initialized", type: "init" });
         }
       } else if (type === "execute") {
-        if (dbReadyPromise) {
-          await dbReadyPromise;
-        }
-        if (!db) {
-          throw new Error("Database is not initialized.");
-        }
-        const result = await executeChain(chain, options == null ? void 0 : options.operations);
+        const result = await enqueueExecute(async () => {
+          if (dbReadyPromise) {
+            await dbReadyPromise;
+          }
+          if (!db) {
+            throw new Error("Database is not initialized.");
+          }
+          currentLiveQueryId = liveQueryId || null;
+          try {
+            return await executeChain(chain, options == null ? void 0 : options.operations);
+          } finally {
+            currentLiveQueryId = null;
+          }
+        });
         postMessage({ id, result, type: "result" });
       } else if (type === "disconnect") {
         connectedClients.delete(id);
@@ -59,6 +111,26 @@ function initializeDatabase(schema) {
               const downlevelTable = downlevelDatabase.table(tableName);
               return {
                 ...downlevelTable,
+                get: (req) => {
+                  trackTableAccess(tableName);
+                  return downlevelTable.get(req);
+                },
+                getMany: (req) => {
+                  trackTableAccess(tableName);
+                  return downlevelTable.getMany(req);
+                },
+                query: (req) => {
+                  trackTableAccess(tableName);
+                  return downlevelTable.query(req);
+                },
+                openCursor: (req) => {
+                  trackTableAccess(tableName);
+                  return downlevelTable.openCursor(req);
+                },
+                count: (req) => {
+                  trackTableAccess(tableName);
+                  return downlevelTable.count(req);
+                },
                 mutate(req) {
                   return downlevelTable.mutate(req).then((res) => {
                     const changedTables = /* @__PURE__ */ new Set();
@@ -96,7 +168,7 @@ function getConfig(key) {
   return null;
 }
 async function executeChain(chain, _operations) {
-  let context = db;
+  let context = createDbAccessProxy(db);
   for (const item of chain) {
     if (item.type === "get") {
       if (context[item.prop] !== void 0) {
@@ -140,6 +212,20 @@ function isSerializable(value) {
   } catch (e) {
     return false;
   }
+}
+function __resetForTests() {
+  if (db) {
+    try {
+      db.close();
+    } catch (e) {
+    }
+  }
+  db = null;
+  dbReadyPromise = null;
+  dbInitializing = false;
+  currentLiveQueryId = null;
+  executeQueue = Promise.resolve();
+  connectedClients.clear();
 }
 
 

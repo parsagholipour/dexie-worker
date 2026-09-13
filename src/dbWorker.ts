@@ -8,13 +8,61 @@ interface MessageListenerOptions {
 let db: Dexie | null = null;
 let dbReadyPromise: Promise<void> | null = null;
 let dbInitializing = false;
+let currentLiveQueryId: string | null = null;
+let executeQueue: Promise<void> = Promise.resolve();
 
 // Keep track of connected clients to send change notifications
 const connectedClients = new Set<number>();
 
+function enqueueExecute<T>(work: () => Promise<T>): Promise<T> {
+  const run = executeQueue.then(work, work);
+  executeQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+function isKnownTableName(name: string): boolean {
+  if (!db) {
+    return false;
+  }
+  if (db.tables?.some((table) => table.name === name)) {
+    return true;
+  }
+  return Boolean((db as any)._dbSchema && name in (db as any)._dbSchema);
+}
+
+function trackTableAccess(tableName: string) {
+  if (!currentLiveQueryId) {
+    return;
+  }
+  postMessage({ type: 'accessedTables', liveQueryId: currentLiveQueryId, accessedTables: [tableName] });
+}
+
+function createDbAccessProxy(database: Dexie) {
+  return new Proxy(database, {
+    get(target, prop) {
+      if (prop === 'table') {
+        return (name: string) => {
+          if (typeof name === 'string') {
+            trackTableAccess(name);
+          }
+          return target.table(name);
+        };
+      }
+      if (typeof prop === 'string' && isKnownTableName(prop)) {
+        trackTableAccess(prop);
+      }
+      const value = (target as any)[prop];
+      if (typeof value === 'function') {
+        return value.bind(target);
+      }
+      return value;
+    },
+  });
+}
+
 const getMessageListener = (options?: MessageListenerOptions) => {
   return async (event: MessageEvent) => {
-    const { id, chain, schema, type } = event.data;
+    const { id, chain, schema, type, liveQueryId } = event.data;
 
     try {
       if (type === 'init') {
@@ -39,13 +87,20 @@ const getMessageListener = (options?: MessageListenerOptions) => {
           postMessage({ id, result: 'Database initialized', type: 'init' });
         }
       } else if (type === 'execute') {
-        if (dbReadyPromise) {
-          await dbReadyPromise;
-        }
-        if (!db) {
-          throw new Error('Database is not initialized.');
-        }
-        const result = await executeChain(chain, options?.operations);
+        const result = await enqueueExecute(async () => {
+          if (dbReadyPromise) {
+            await dbReadyPromise;
+          }
+          if (!db) {
+            throw new Error('Database is not initialized.');
+          }
+          currentLiveQueryId = liveQueryId || null;
+          try {
+            return await executeChain(chain, options?.operations);
+          } finally {
+            currentLiveQueryId = null;
+          }
+        });
         postMessage({ id, result, type: 'result' });
       } else if (type === 'disconnect') {
         connectedClients.delete(id);
@@ -74,6 +129,26 @@ function initializeDatabase(schema: any): Promise<void> {
               const downlevelTable = downlevelDatabase.table(tableName);
               return {
                 ...downlevelTable,
+                get: (req) => {
+                  trackTableAccess(tableName);
+                  return downlevelTable.get(req);
+                },
+                getMany: (req) => {
+                  trackTableAccess(tableName);
+                  return downlevelTable.getMany(req);
+                },
+                query: (req) => {
+                  trackTableAccess(tableName);
+                  return downlevelTable.query(req);
+                },
+                openCursor: (req) => {
+                  trackTableAccess(tableName);
+                  return downlevelTable.openCursor(req);
+                },
+                count: (req) => {
+                  trackTableAccess(tableName);
+                  return downlevelTable.count(req);
+                },
                 mutate(req: DBCoreMutateRequest) {
                   // Perform the mutation
                   return downlevelTable.mutate(req).then((res) => {
@@ -121,7 +196,7 @@ function getConfig(key: string) {
 }
 
 async function executeChain(chain: any[], _operations?: Record<string, any>) {
-  let context: any = db;
+  let context: any = createDbAccessProxy(db!);
   for (const item of chain) {
     if (item.type === 'get') {
       if (context[item.prop] !== undefined) {
@@ -175,4 +250,20 @@ function isSerializable(value: any): boolean {
   }
 }
 
-export {getMessageListener}
+function __resetForTests() {
+  if (db) {
+    try {
+      db.close();
+    } catch {
+      // Database may already be closed
+    }
+  }
+  db = null;
+  dbReadyPromise = null;
+  dbInitializing = false;
+  currentLiveQueryId = null;
+  executeQueue = Promise.resolve();
+  connectedClients.clear();
+}
+
+export {getMessageListener, __resetForTests}

@@ -6,14 +6,19 @@ import {supportsBroadcastChannel} from "./helpers";
 
 // Variables to manage the worker and message handling
 let worker: Worker | null = null;
-let workerReady: Promise<Worker>;
-let db: Dexie;
+let workerReady: Promise<Worker> | undefined;
+let db: Dexie | undefined;
 let messageId = 0;
 const pendingMessages = new Map<
   number,
   { resolve: (value?: any) => void; reject: (reason?: any) => void }
 >();
 const changeListeners: Array<(changedTables: Set<string>) => void> = [];
+const liveQueryAccessListeners = new Map<string, (tableName: string) => void>();
+let useStorageMutatedNotifications = false;
+let storageMutatedHandler: ((changedParts: ObservabilitySet) => void) | null = null;
+let pendingChangedTables: Set<string> | null = null;
+let changeNotificationsReady = false;
 
 /**
  * Initializes the web worker and sets up message handling.
@@ -38,8 +43,12 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
       }
 
       const workerMessageHandler = (event: MessageEvent<WorkerResponse>) => {
-        const {id, result, error, type, changedTables} = event.data;
-        if (type === 'init') {
+        const {id, result, error, type, changedTables, accessedTables, liveQueryId} = event.data;
+        if (type === 'accessedTables' && liveQueryId) {
+          const listener = liveQueryAccessListeners.get(liveQueryId);
+          accessedTables?.forEach((tableName) => listener?.(tableName));
+        } else if (type === 'init') {
+          changeNotificationsReady = true;
           resolve(worker!);
         } else {
           if (event.data.error) {
@@ -57,10 +66,8 @@ function initializeWorker<T extends Dexie>(dbInstance: T, options?: DexieWorkerO
           }
         }
 
-        // Existing change listener handling
-        if (type === 'changes' && changedTables) {
-          const changedTablesSet = new Set<string>(changedTables);
-          changeListeners.forEach((listener) => listener(changedTablesSet));
+        if (type === 'changes' && changedTables && !useStorageMutatedNotifications && changeNotificationsReady) {
+          notifyListeners(changedTables);
         }
       }
       worker = options?.worker ?? new Worker(workerURL, {type: 'classic'})
@@ -105,29 +112,35 @@ export default function createDexieProxy<T extends Dexie>(dbInstance: T, options
  * Creates a proxy that builds a chain of property accesses and method calls.
  * @param chain The current chain of operations.
  * @param tableAccessCallback Optional callback to track table accesses.
+ * @param liveQueryId Optional liveQuery subscription id forwarded to the worker.
  * @returns A proxy that allows for method chaining.
  */
 function createProxy<T>(
   chain: ChainItem[] = [],
-  tableAccessCallback?: (tableName: string) => void
+  tableAccessCallback?: (tableName: string) => void,
+  liveQueryId?: string
 ): T {
-  const proxyFunction = function () {
-  };
-  const proxy = new Proxy(proxyFunction, {
+  // Root must be a plain object. A function target makes `typeof db === 'function'`,
+  // so React `setState(db)` treats it as an updater and calls it.
+  const isRoot = chain.length === 0;
+  const target = isRoot ? {} : function () {};
+  const proxy = new Proxy(target, {
     get(_target, prop: string | symbol) {
       if (prop.toString() === 'then') {
+        if (isRoot) {
+          return undefined;
+        }
         const lastItem = chain[chain.length - 1];
         if (FALLBACK_METHODS.includes(lastItem.method as string)) {
           return executeOnMainThread(chain)
         }
-        const resultPromise = executeChain(chain);
+        const resultPromise = executeChain(chain, liveQueryId);
         return resultPromise.then.bind(resultPromise);
       }
-      if (tableAccessCallback && chain.length === 0) {
-        // At the root level, the first property access might be a table name
+      if (tableAccessCallback && isRoot && isKnownTable(prop.toString())) {
         tableAccessCallback(prop.toString());
       }
-      return createProxy(chain.concat({type: 'get', prop: prop.toString()}), tableAccessCallback);
+      return createProxy(chain.concat({type: 'get', prop: prop.toString()}), tableAccessCallback, liveQueryId);
     },
     apply(_target, _thisArg, args: any[]) {
       const lastItem = chain[chain.length - 1];
@@ -138,7 +151,7 @@ function createProxy<T>(
       } else {
         newChain = chain.concat({type: 'call', method: '<anonymous>', args});
       }
-      return createProxy(newChain, tableAccessCallback);
+      return createProxy(newChain, tableAccessCallback, liveQueryId);
     },
   });
 
@@ -150,7 +163,10 @@ function createProxy<T>(
  * @param chain The chain of property accesses and method calls.
  * @returns A promise that resolves with the result of the execution.
  */
-async function executeChain(chain: ChainItem[]): Promise<any> {
+async function executeChain(
+  chain: ChainItem[],
+  liveQueryId?: string
+): Promise<any> {
   if (workerReady === undefined) {
     throw new Error('You cannot call `useLiveQuery` before web worker initialization (call `getWebWorkerDB` first)')
   }
@@ -158,7 +174,11 @@ async function executeChain(chain: ChainItem[]): Promise<any> {
   return new Promise((resolve, reject) => {
     const id = messageId++;
     pendingMessages.set(id, {resolve, reject});
-    _worker!.postMessage({id, type: 'execute', chain} as WorkerMessage);
+    const message: WorkerMessage = {id, type: 'execute', chain};
+    if (liveQueryId) {
+      message.liveQueryId = liveQueryId;
+    }
+    _worker!.postMessage(message);
   });
 }
 
@@ -169,6 +189,9 @@ async function executeChain(chain: ChainItem[]): Promise<any> {
  * @returns A promise that resolves with the result of the execution.
  */
 async function executeOnMainThread(chain: ChainItem[]): Promise<any> {
+  if (!db) {
+    throw new Error('You cannot call `useLiveQuery` before web worker initialization (call `getWebWorkerDB` first)')
+  }
   let current: any = db; // Start from the Dexie database instance
 
   for (const item of chain) {
@@ -214,32 +237,38 @@ async function executeOnMainThread(chain: ChainItem[]): Promise<any> {
  *
  * @param db - The Dexie database instance to which the middleware will be attached.
  */
-function addChangeTrackingMiddleware(db: Dexie) {
+function addChangeTrackingMiddleware(dbInstance: Dexie) {
   if (supportsBroadcastChannel()) {
     try {
-      Dexie.on('storagemutated', (changedParts: ObservabilitySet) => {
+      storageMutatedHandler = (changedParts: ObservabilitySet) => {
+        if (!changeNotificationsReady) {
+          return;
+        }
         const changedTables = new Set<string>();
         Object.keys(changedParts || {}).forEach(key => {
           const splitKey = key.split('/');
           const tableName = splitKey[3];
           const dbName = splitKey[2];
-          if (dbName === db.name) {
+          if (dbName === dbInstance.name) {
             changedTables.add(tableName);
           }
         })
         if (changedTables.size > 0) {
-          changeListeners.forEach((listener) => listener(changedTables));
+          notifyListeners(changedTables);
         }
-      })
-
+      };
+      Dexie.on('storagemutated', storageMutatedHandler);
+      useStorageMutatedNotifications = true;
       return;
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) { /* storagemutated event is not supported */ }
   }
 
+  useStorageMutatedNotifications = false;
+
   // fallback method of listening to table changes
-  db.use({
+  dbInstance.use({
     stack: 'dbcore',
     name: 'ChangeTrackingMiddleware',
     create(downlevelDatabase: DBCore) {
@@ -252,10 +281,7 @@ function addChangeTrackingMiddleware(db: Dexie) {
             mutate(req: DBCoreMutateRequest) {
               // Perform the mutation
               return downlevelTable.mutate(req).then((res) => {
-                // After the mutation, notify the main thread
-                const changedTables = new Set<string>();
-                changedTables.add(tableName);
-                changeListeners.forEach((listener) => listener(changedTables));
+                notifyListeners([tableName]);
                 return res;
               });
             },
@@ -264,6 +290,33 @@ function addChangeTrackingMiddleware(db: Dexie) {
       };
     },
   })
+}
+
+function isKnownTable(name: string): boolean {
+  if (!db) {
+    return false;
+  }
+  if (db.tables?.some((table) => table.name === name)) {
+    return true;
+  }
+  return Boolean(db._dbSchema && name in db._dbSchema);
+}
+
+function notifyListeners(changedTables: Iterable<string>): void {
+  if (!pendingChangedTables) {
+    pendingChangedTables = new Set();
+    queueMicrotask(() => {
+      const batch = pendingChangedTables;
+      pendingChangedTables = null;
+      if (!batch || batch.size === 0) {
+        return;
+      }
+      changeListeners.slice().forEach((listener) => listener(batch));
+    });
+  }
+  for (const table of changedTables) {
+    pendingChangedTables.add(table);
+  }
 }
 
 
@@ -319,4 +372,45 @@ function removeChangeListener(listener: (changedTables: Set<string>) => void): v
   }
 }
 
-export {createProxy, addChangeListener, removeChangeListener};
+function addLiveQueryAccessListener(liveQueryId: string, listener: (tableName: string) => void): void {
+  liveQueryAccessListeners.set(liveQueryId, listener);
+}
+
+function removeLiveQueryAccessListener(liveQueryId: string): void {
+  liveQueryAccessListeners.delete(liveQueryId);
+}
+
+function __notifyForTests(changedTables: Set<string>): void {
+  notifyListeners(changedTables);
+}
+
+function __resetForTests(): void {
+  if (storageMutatedHandler) {
+    try {
+      Dexie.on.storagemutated.unsubscribe(storageMutatedHandler);
+    } catch {
+      // Event may not expose unsubscribe in every Dexie version
+    }
+    storageMutatedHandler = null;
+  }
+  worker = null;
+  workerReady = undefined;
+  db = undefined;
+  messageId = 0;
+  pendingMessages.clear();
+  changeListeners.length = 0;
+  liveQueryAccessListeners.clear();
+  useStorageMutatedNotifications = false;
+  pendingChangedTables = null;
+  changeNotificationsReady = false;
+}
+
+export {
+  createProxy,
+  addChangeListener,
+  removeChangeListener,
+  addLiveQueryAccessListener,
+  removeLiveQueryAccessListener,
+  __notifyForTests,
+  __resetForTests
+};
