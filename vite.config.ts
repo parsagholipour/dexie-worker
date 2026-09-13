@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import path from 'path';
 
 export default defineConfig(({mode}) => ({
@@ -17,5 +17,9 @@ export default defineConfig(({mode}) => ({
   },
   worker: {
     format: 'es',
+  },
+  test: {
+    environment: 'node',
+    setupFiles: ['./src/__tests__/setup.ts'],
   },
 }));

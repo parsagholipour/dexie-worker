@@ -17,7 +17,8 @@
   "scripts": {
     "build": "node src/scripts/generateWebWorkerDev.js && vite build && tsc --emitDeclarationOnly --outDir dist && tsx ./src/scripts/buildWorker.ts",
     "gen-worker": "node src/scripts/generateWebWorkerDev.js",
-    "lint": "eslint . --ext .ts,.tsx"
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "vitest run"
   },
   "files": [
     "dist"
@@ -35,24 +36,26 @@
   },
   "license": "MIT",
   "dependencies": {
-    "rxjs": "^7.8.2",
-    "dexie-react-hooks": "^1.0.0"
+    "dexie-react-hooks": "^1.0.0",
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
-    "dexie": "^3.2.4",
-    "dexie-react-hooks": "^1.0.0",
-    "rxjs": "^7.8.1",
     "@types/node": "^22.8.5",
     "@typescript-eslint/eslint-plugin": "^8.11.0",
     "@typescript-eslint/parser": "^8.11.0",
+    "dexie": "^3.2.4",
+    "dexie-react-hooks": "^1.0.0",
     "esbuild": "^0.24.0",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.37.2",
+    "fake-indexeddb": "^6.2.5",
+    "rxjs": "^7.8.1",
     "ts-node": "^10.9.2",
     "tslib": "^2.7.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "vite": "^5.4.9"
+    "vite": "^5.4.9",
+    "vitest": "^2.1.9"
   },
   "peerDependencies": {
     "dexie": "*"
